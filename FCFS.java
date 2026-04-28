@@ -1,0 +1,127 @@
+import java.util.*;
+
+class Process {
+    int id;
+    int arrival;
+    int burst;
+    int completion;
+    int turnaround;
+    int waiting;
+
+    Process(int id, int arrival, int burst) {
+        this.id = id;
+        this.arrival = arrival;
+        this.burst = burst;
+    }
+}
+
+public class FCFS {
+
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+
+        System.out.print("Enter number of processes: ");
+        int n = sc.nextInt();
+
+        Process[] processes = new Process[n];
+
+        // Input
+        for (int i = 0; i < n; i++) {
+            System.out.print("Process " + (i + 1) + " - Arrival Time: ");
+            int arrival = sc.nextInt();
+
+            System.out.print("Process " + (i + 1) + " - Burst Time: ");
+            int burst = sc.nextInt();
+
+            processes[i] = new Process(i + 1, arrival, burst);
+        }
+
+        fcfsSchedule(processes);
+
+        sc.close();
+    }
+
+    public static void fcfsSchedule(Process[] processes) {
+        // Sort by arrival time
+        Arrays.sort(processes, Comparator.comparingInt(p -> p.arrival));
+
+        int currentTime = 0;
+
+        // Calculate times
+        for (int i = 0; i < processes.length; i++) {
+            if (currentTime < processes[i].arrival) {
+                currentTime = processes[i].arrival;
+            }
+
+            processes[i].completion = currentTime + processes[i].burst;
+            processes[i].turnaround = processes[i].completion - processes[i].arrival;
+            processes[i].waiting = processes[i].turnaround - processes[i].burst;
+
+            currentTime = processes[i].completion;
+        }
+
+        printResults(processes);
+        printGanttChart(processes);
+    }
+
+    public static void printResults(Process[] processes) {
+        System.out.println("\n=== FCFS RESULTS ===");
+        System.out.println("Process\tArrival\tBurst\tWaiting\tTurnaround");
+
+        double totalWaiting = 0, totalTurnaround = 0;
+
+        for (Process p : processes) {
+            System.out.println("P" + p.id + "\t" + p.arrival + "\t" + p.burst +
+                    "\t" + p.waiting + "\t" + p.turnaround);
+
+            totalWaiting += p.waiting;
+            totalTurnaround += p.turnaround;
+        }
+
+        System.out.printf("\nAverage Waiting Time: %.2f\n", totalWaiting / processes.length);
+        System.out.printf("Average Turnaround Time: %.2f\n", totalTurnaround / processes.length);
+    }
+
+    public static void printGanttChart(Process[] processes) {
+        int maxTime = processes[processes.length - 1].completion;
+
+        System.out.println("\n=== GANTT CHART ===");
+
+        System.out.print("Time:    ");
+        for (int t = 0; t <= maxTime; t++) {
+            System.out.printf("%-3d", t);
+        }
+        System.out.println();
+
+        int[] runningProcess = new int[maxTime + 1];
+
+        // Fill running process timeline
+        for (int i = 0; i < processes.length; i++) {
+            int startTime = (i == 0) ? processes[i].arrival : processes[i - 1].completion;
+
+            if (startTime < processes[i].arrival) {
+                startTime = processes[i].arrival;
+            }
+
+            for (int t = startTime; t < processes[i].completion; t++) {
+                runningProcess[t] = processes[i].id;
+            }
+        }
+
+        // Print per-process timeline
+        for (Process p : processes) {
+            System.out.print("P" + p.id + ":      ");
+
+            for (int t = 0; t <= maxTime; t++) {
+                if (t < p.arrival || t >= p.completion) {
+                    System.out.print("-  ");
+                } else if (runningProcess[t] == p.id) {
+                    System.out.print("R  ");
+                } else {
+                    System.out.print("W  ");
+                }
+            }
+            System.out.println();
+        }
+    }
+}
