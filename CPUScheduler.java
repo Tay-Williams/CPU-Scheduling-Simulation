@@ -252,7 +252,7 @@ class Round_Robin_Scheduling {
         int n = keyboard.nextInt();
 
         //checks to see if the user entered at least 20 processes
-        if (n < 20) {
+        while (n < 20) {
             System.out.print("\nError: Must add at least 20 processes. \nEnter number of processes: ");
             n = keyboard.nextInt();
         }
