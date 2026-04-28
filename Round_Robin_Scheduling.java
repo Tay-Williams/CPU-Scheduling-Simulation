@@ -9,6 +9,12 @@ public class Round_Robin_Scheduling {
         System.out.print("Enter the number of processes to simulate (minimum of 20):");
         int n = keyboard.nextInt();
 
+        //checks to see if the user entered at least 20 processes
+        if (n < 20) {
+            System.out.print("\nError: Must add at least 20 processes. \nEnter number of processes: ");
+            n = keyboard.nextInt();
+        }
+        
         int arrivalTimes [] = new int [n];
 
         List<int[]> [] IO_Operations = new List[n];
