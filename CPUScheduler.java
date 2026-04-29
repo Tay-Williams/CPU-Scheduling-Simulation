@@ -39,220 +39,164 @@ public class CPUScheduler {
 
 // ==================== FCFS CODE ====================
 
-class FCFSProcess {
-    int id;
-    int arrival;
-    int burst;
-    int completion;
-    int turnaround;
-    int waiting;
-    int remainingTime;
-    
-    // I/O tracking
-    List<int[]> ioOperations;
-    int currentIoPair;
-    boolean inIo;
-    int ioFinishTime;
-    
-    FCFSProcess(int id, int arrival, int burst) {
-        this.id = id;
-        this.arrival = arrival;
-        this.burst = burst;
-        this.remainingTime = burst;
-        this.ioOperations = new ArrayList<>();
-        this.currentIoPair = 0;
-        this.inIo = false;
-    }
-}
-
 class FCFS {
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
 
         System.out.print("Enter number of processes (minimum 20): ");
         int n = sc.nextInt();
-        
-        if (n < 20) {
-            System.out.println("Warning: Minimum 20 processes required. Setting to 20.");
-            n = 20;
+
+        while (n < 20) {
+            System.out.print("Must be at least 20. Enter again: ");
+            n = sc.nextInt();
         }
 
-        FCFSProcess[] processes = new FCFSProcess[n];
+        int[] arrival = new int[n];
+        int[] burst = new int[n];
+        List<int[]>[] ioOps = new List[n];
 
-        // Input for each process
         for (int i = 0; i < n; i++) {
-            System.out.println("\n--- Process " + (i + 1) + " ---");
+            System.out.println("\nProcess " + (i + 1));
             System.out.print("Arrival Time: ");
-            int arrival = sc.nextInt();
-
+            arrival[i] = sc.nextInt();
             System.out.print("Burst Time: ");
-            int burst = sc.nextInt();
-
-            System.out.print("I/O Start Time (0 if none): ");
+            burst[i] = sc.nextInt();
+            System.out.print("I/O Start Time: ");
             int ioStart = sc.nextInt();
+            System.out.print("I/O Duration: ");
+            int ioDur = sc.nextInt();
 
-            System.out.print("I/O Duration (0 if none): ");
-            int ioDuration = sc.nextInt();
-
-            processes[i] = new FCFSProcess(i + 1, arrival, burst);
-            
-            // Setup I/O operations
-            if (ioStart > 0 && ioStart < burst) {
-                processes[i].ioOperations.add(new int[]{ioStart, ioDuration});
-                processes[i].ioOperations.add(new int[]{burst - ioStart, 0});
+            List<int[]> list = new ArrayList<>();
+            if (ioStart >= burst[i] || ioStart == 0) {
+                list.add(new int[]{burst[i], 0});
             } else {
-                processes[i].ioOperations.add(new int[]{burst, 0});
+                list.add(new int[]{ioStart, ioDur});
+                list.add(new int[]{burst[i] - ioStart, 0});
             }
+            ioOps[i] = list;
         }
 
-        fcfsSchedule(processes);
+        simulateFCFS(n, arrival, burst, ioOps);
     }
 
-    public static void fcfsSchedule(FCFSProcess[] processes) {
-        // Sort by arrival time
-        Arrays.sort(processes, Comparator.comparingInt(p -> p.arrival));
+    static void simulateFCFS(int n, int[] arrival, int[] burst, List<int[]>[] ioOps) {
+        int[] remaining = new int[n];
+        int[] segment = new int[n];
+        int[] completion = new int[n];
+        int[] waiting = new int[n];
+        int[] lastReady = new int[n];
 
-        int currentTime = 0;
-        int completed = 0;
-        int n = processes.length;
-        
-        // Track remaining CPU time for each process
-        for (FCFSProcess p : processes) {
-            p.remainingTime = p.ioOperations.get(0)[0];
-            p.currentIoPair = 0;
-            p.inIo = false;
+        for (int i = 0; i < n; i++) {
+            remaining[i] = ioOps[i].get(0)[0];
+            lastReady[i] = arrival[i];
+            segment[i] = 0;
         }
-        
-        Queue<FCFSProcess> readyQueue = new LinkedList<>();
+
+        PriorityQueue<int[]> events = new PriorityQueue<>(Comparator.comparingInt(a -> a[0]));
+        for (int i = 0; i < n; i++) {
+            events.add(new int[]{arrival[i], 0, i});
+        }
+
+        Queue<Integer> ready = new LinkedList<>();
+        Queue<Integer> ioWait = new LinkedList<>();
         boolean ioBusy = false;
-        Queue<FCFSProcess> ioWaitingQueue = new LinkedList<>();
-        FCFSProcess currentProcess = null;
-        int currentIoFinishTime = 0;
-        
+        int cpu = -1;
+        int time = 0;
+        int completed = 0;
+
         while (completed < n) {
-            // Add all processes that have arrived and are not already in queue/in I/O
-            for (FCFSProcess p : processes) {
-                if (p.arrival <= currentTime && p.remainingTime > 0 && !readyQueue.contains(p) && p != currentProcess && !p.inIo) {
-                    readyQueue.add(p);
-                }
+            if (cpu == -1 && !ready.isEmpty()) {
+                cpu = ready.poll();
+                waiting[cpu] += time - lastReady[cpu];
+                events.add(new int[]{time + remaining[cpu], 1, cpu});
             }
-            
-            // If CPU is idle and ready queue not empty, start next process
-            if (currentProcess == null && !readyQueue.isEmpty()) {
-                currentProcess = readyQueue.poll();
-            }
-            
-            // Check if I/O finished
-            if (ioBusy && currentTime >= currentIoFinishTime) {
-                ioBusy = false;
-                // Return the process that finished I/O to ready queue
-                if (currentProcess != null && currentProcess.inIo) {
-                    currentProcess.inIo = false;
-                    currentProcess.currentIoPair++;
-                    if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
-                        currentProcess.remainingTime = currentProcess.ioOperations.get(currentProcess.currentIoPair)[0];
-                        readyQueue.add(currentProcess);
+
+            int[] e = events.poll();
+            if (e == null) {
+                if (cpu == -1 && ready.isEmpty() && !ioBusy) {
+                    int nextArrival = Integer.MAX_VALUE;
+                    for (int i = 0; i < n; i++) {
+                        if (remaining[i] > 0 && arrival[i] > time) {
+                            nextArrival = Math.min(nextArrival, arrival[i]);
+                        }
+                    }
+                    if (nextArrival != Integer.MAX_VALUE) {
+                        time = nextArrival;
                     } else {
-                        // Process completed after I/O
-                        currentProcess.completion = currentTime;
-                        currentProcess.turnaround = currentProcess.completion - currentProcess.arrival;
-                        currentProcess.waiting = currentProcess.turnaround - currentProcess.burst;
-                        completed++;
-                        currentProcess = null;
+                        time++;
                     }
                 }
-                // Start next I/O if waiting
-                if (!ioWaitingQueue.isEmpty()) {
-                    FCFSProcess nextIo = ioWaitingQueue.poll();
-                    nextIo.inIo = true;
-                    int[] nextSegment = nextIo.ioOperations.get(nextIo.currentIoPair);
-                    currentIoFinishTime = currentTime + nextSegment[1];
-                    ioBusy = true;
-                }
+                continue;
             }
-            
-            // Execute current process
-            if (currentProcess != null && !currentProcess.inIo) {
-                currentProcess.remainingTime--;
-                currentTime++;
-                
-                // Check if need to do I/O
-                int[] currentSegment = currentProcess.ioOperations.get(currentProcess.currentIoPair);
-                int executedSoFar = currentProcess.burst - currentProcess.remainingTime;
-                
-                if (currentSegment[1] > 0 && executedSoFar >= currentSegment[0]) {
-                    // Time for I/O
-                    currentProcess.inIo = true;
+
+            time = e[0];
+            int type = e[1];
+            int pid = e[2];
+
+            if (type == 0) {
+                lastReady[pid] = time;
+                ready.add(pid);
+            } 
+            else if (type == 1) {
+                int ioDur = ioOps[pid].get(segment[pid])[1];
+                if (ioDur > 0) {
                     if (!ioBusy) {
                         ioBusy = true;
-                        currentIoFinishTime = currentTime + currentSegment[1];
+                        events.add(new int[]{time + ioDur, 2, pid});
                     } else {
-                        ioWaitingQueue.add(currentProcess);
+                        ioWait.add(pid);
                     }
-                    currentProcess = null;
-                }
-                // Check if CPU burst finished
-                else if (currentProcess.remainingTime == 0) {
-                    currentProcess.currentIoPair++;
-                    if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
-                        currentProcess.remainingTime = currentProcess.ioOperations.get(currentProcess.currentIoPair)[0];
-                        readyQueue.add(currentProcess);
+                } else {
+                    segment[pid]++;
+                    if (segment[pid] < ioOps[pid].size()) {
+                        remaining[pid] = ioOps[pid].get(segment[pid])[0];
+                        lastReady[pid] = time;
+                        ready.add(pid);
                     } else {
-                        currentProcess.completion = currentTime;
-                        currentProcess.turnaround = currentProcess.completion - currentProcess.arrival;
-                        currentProcess.waiting = currentProcess.turnaround - currentProcess.burst;
+                        completion[pid] = time;
                         completed++;
                     }
-                    currentProcess = null;
                 }
+                cpu = -1;
             } 
-            // No process running and nothing in ready queue or I/O
-            else if (currentProcess == null && readyQueue.isEmpty()) {
-                // Jump to next arrival time to avoid infinite loop
-                int nextArrival = Integer.MAX_VALUE;
-                for (FCFSProcess p : processes) {
-                    if (p.remainingTime > 0 && p.arrival > currentTime) {
-                        nextArrival = Math.min(nextArrival, p.arrival);
-                    }
-                }
-                if (nextArrival != Integer.MAX_VALUE) {
-                    currentTime = nextArrival;
+            else if (type == 2) {
+                ioBusy = false;
+                segment[pid]++;
+                if (segment[pid] < ioOps[pid].size()) {
+                    remaining[pid] = ioOps[pid].get(segment[pid])[0];
+                    lastReady[pid] = time;
+                    ready.add(pid);
                 } else {
-                    currentTime++;
+                    completion[pid] = time;
+                    completed++;
                 }
-            }
-            else {
-                currentTime++;
+                if (!ioWait.isEmpty()) {
+                    int next = ioWait.poll();
+                    int dur = ioOps[next].get(segment[next])[1];
+                    ioBusy = true;
+                    events.add(new int[]{time + dur, 2, next});
+                }
             }
         }
-        
-        printResults(processes);
-    }
 
-    public static void printResults(FCFSProcess[] processes) {
         System.out.println("\n========== FCFS SCHEDULING RESULTS ==========");
         System.out.println("PID\tArrival\tBurst\tWaiting\tTurnaround");
         System.out.println("------------------------------------------------");
         
         double totalWaiting = 0, totalTurnaround = 0;
-        
-        // Sort by ID for display
-        Arrays.sort(processes, Comparator.comparingInt(p -> p.id));
-        
-        for (FCFSProcess p : processes) {
-            System.out.printf("%d\t%d\t%d\t%d\t%d\n", 
-                p.id, p.arrival, p.burst, p.waiting, p.turnaround);
-            totalWaiting += p.waiting;
-            totalTurnaround += p.turnaround;
+        for (int i = 0; i < n; i++) {
+            int tat = completion[i] - arrival[i];
+            System.out.printf("%d\t%d\t%d\t%d\t%d\n", (i + 1), arrival[i], burst[i], waiting[i], tat);
+            totalWaiting += waiting[i];
+            totalTurnaround += tat;
         }
         
         System.out.println("------------------------------------------------");
-        System.out.printf("Average Waiting Time: %.2f\n", totalWaiting / processes.length);
-        System.out.printf("Average Turnaround Time: %.2f\n", totalTurnaround / processes.length);
+        System.out.printf("Average Waiting Time: %.2f\n", totalWaiting / n);
+        System.out.printf("Average Turnaround Time: %.2f\n", totalTurnaround / n);
     }
 }
-
-// ==================== ROUND ROBIN CODE (YOUR EXACT CODE) ====================
+// ==================== ROUND ROBIN CODE ====================
 
 class Round_Robin_Scheduling {
     public static void main(String[] args) {
@@ -536,233 +480,193 @@ class Round_Robin_Scheduling {
 
 // ==================== PRIORITY CODE ====================
 
-class PriorityProcess {
-    int pid;
-    int arrivalTime;
-    int burstTime;
-    int priority;
-    int remainingTime;
-    int waitingTime;
-    int turnaroundTime;
-    int completionTime;
-    
-    // I/O tracking
-    List<int[]> ioOperations;
-    int currentIoPair;
-    boolean inIo;
-    int ioFinishTime;
-    int originalBurst;
-    
-    public PriorityProcess(int pid, int arrivalTime, int burstTime, int priority) {
-        this.pid = pid;
-        this.arrivalTime = arrivalTime;
-        this.burstTime = burstTime;
-        this.priority = priority;
-        this.remainingTime = burstTime;
-        this.waitingTime = 0;
-        this.turnaroundTime = 0;
-        this.completionTime = 0;
-        this.originalBurst = burstTime;
-        this.ioOperations = new ArrayList<>();
-        this.currentIoPair = 0;
-        this.inIo = false;
-    }
-}
-
 class PriorityScheduler {
-    
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
-        
+
         System.out.print("Enter number of processes (minimum 20): ");
         int n = sc.nextInt();
-        
-        if (n < 20) {
-            System.out.println("Warning: Minimum 20 processes required. Setting to 20.");
-            n = 20;
+
+        while (n < 20) {
+            System.out.print("Must be at least 20. Enter again: ");
+            n = sc.nextInt();
         }
-        
-        List<PriorityProcess> processes = new ArrayList<>();
-        
-        // Input for each process
+
+        int[] arrival = new int[n];
+        int[] burst = new int[n];
+        int[] priority = new int[n];
+        List<int[]>[] ioOps = new List[n];
+
         for (int i = 0; i < n; i++) {
-            System.out.println("\n--- Process " + (i + 1) + " ---");
+            System.out.println("\nProcess " + (i + 1));
             System.out.print("Arrival Time: ");
-            int arrival = sc.nextInt();
-            
+            arrival[i] = sc.nextInt();
             System.out.print("Burst Time: ");
-            int burst = sc.nextInt();
-            
-            System.out.print("Priority (lower = higher priority): ");
-            int priority = sc.nextInt();
-            
-            System.out.print("I/O Start Time (0 if none): ");
+            burst[i] = sc.nextInt();
+            System.out.print("Priority (lower = higher): ");
+            priority[i] = sc.nextInt();
+            System.out.print("I/O Start Time: ");
             int ioStart = sc.nextInt();
-            
-            System.out.print("I/O Duration (0 if none): ");
-            int ioDuration = sc.nextInt();
-            
-            PriorityProcess p = new PriorityProcess(i + 1, arrival, burst, priority);
-            
-            // Setup I/O operations
-            if (ioStart > 0 && ioStart < burst) {
-                p.ioOperations.add(new int[]{ioStart, ioDuration});
-                p.ioOperations.add(new int[]{burst - ioStart, 0});
+            System.out.print("I/O Duration: ");
+            int ioDur = sc.nextInt();
+
+            List<int[]> list = new ArrayList<>();
+            if (ioStart >= burst[i] || ioStart == 0) {
+                list.add(new int[]{burst[i], 0});
             } else {
-                p.ioOperations.add(new int[]{burst, 0});
+                list.add(new int[]{ioStart, ioDur});
+                list.add(new int[]{burst[i] - ioStart, 0});
             }
-            
-            processes.add(p);
+            ioOps[i] = list;
         }
-        
-        // Run Preemptive Priority Scheduling
-        List<PriorityProcess> results = preemptivePriority(processes);
-        
+
+        simulatePriority(n, arrival, burst, priority, ioOps);
+    }
+
+    static void simulatePriority(int n, int[] arrival, int[] burst, int[] priority, List<int[]>[] ioOps) {
+        int[] remaining = new int[n];
+        int[] segment = new int[n];
+        int[] completion = new int[n];
+        int[] waiting = new int[n];
+        int[] lastReady = new int[n];
+
+        for (int i = 0; i < n; i++) {
+            remaining[i] = ioOps[i].get(0)[0];
+            segment[i] = 0;
+            lastReady[i] = arrival[i];
+        }
+
+        PriorityQueue<int[]> events = new PriorityQueue<>(Comparator.comparingInt(a -> a[0]));
+        for (int i = 0; i < n; i++) {
+            events.add(new int[]{arrival[i], 0, i});
+        }
+
+        List<Integer> ready = new ArrayList<>();
+        Queue<Integer> ioWait = new LinkedList<>();
+        boolean ioBusy = false;
+        int cpu = -1;
+        int time = 0;
+        int completed = 0;
+
+        while (completed < n) {
+            // Pick highest priority process from ready queue
+            if (cpu == -1 && !ready.isEmpty()) {
+                int best = 0;
+                for (int i = 1; i < ready.size(); i++) {
+                    if (priority[ready.get(i)] < priority[ready.get(best)]) {
+                        best = i;
+                    }
+                }
+                cpu = ready.remove(best);
+                waiting[cpu] += time - lastReady[cpu];
+                events.add(new int[]{time + 1, 1, cpu});
+            }
+
+            int[] e = events.poll();
+            if (e == null) {
+                if (cpu == -1 && ready.isEmpty() && !ioBusy && ioWait.isEmpty()) {
+                    int next = Integer.MAX_VALUE;
+                    for (int i = 0; i < n; i++) {
+                        if (remaining[i] > 0 && arrival[i] > time) {
+                            next = Math.min(next, arrival[i]);
+                        }
+                    }
+                    if (next != Integer.MAX_VALUE) time = next;
+                    else time++;
+                }
+                continue;
+            }
+
+            time = e[0];
+            int type = e[1];
+            int pid = e[2];
+
+            if (type == 0) {
+                lastReady[pid] = time;
+                ready.add(pid);
+                // Preempt if higher priority
+                if (cpu != -1 && priority[pid] < priority[cpu]) {
+                    events.add(new int[]{time, 1, cpu});
+                    cpu = -1;
+                }
+            } 
+            else if (type == 1) {
+                remaining[pid]--;
+                
+                if (remaining[pid] == 0) {
+                    int ioDur = ioOps[pid].get(segment[pid])[1];
+                    if (ioDur > 0) {
+                        if (!ioBusy) {
+                            ioBusy = true;
+                            events.add(new int[]{time + ioDur, 2, pid});
+                        } else {
+                            ioWait.add(pid);
+                        }
+                    } else {
+                        segment[pid]++;
+                        if (segment[pid] < ioOps[pid].size()) {
+                            remaining[pid] = ioOps[pid].get(segment[pid])[0];
+                            lastReady[pid] = time;
+                            ready.add(pid);
+                        } else {
+                            completion[pid] = time;
+                            completed++;
+                        }
+                    }
+                    cpu = -1;
+                } else {
+                    // Check if higher priority process is waiting
+                    boolean higherExists = false;
+                    for (int p : ready) {
+                        if (priority[p] < priority[pid]) {
+                            higherExists = true;
+                            break;
+                        }
+                    }
+                    if (higherExists) {
+                        lastReady[pid] = time;
+                        ready.add(pid);
+                        cpu = -1;
+                    } else {
+                        events.add(new int[]{time + 1, 1, pid});
+                    }
+                }
+            } 
+            else if (type == 2) {
+                ioBusy = false;
+                segment[pid]++;
+                if (segment[pid] < ioOps[pid].size()) {
+                    remaining[pid] = ioOps[pid].get(segment[pid])[0];
+                    lastReady[pid] = time;
+                    ready.add(pid);
+                } else {
+                    completion[pid] = time;
+                    completed++;
+                }
+                if (!ioWait.isEmpty()) {
+                    int next = ioWait.poll();
+                    int dur = ioOps[next].get(segment[next])[1];
+                    ioBusy = true;
+                    events.add(new int[]{time + dur, 2, next});
+                }
+            }
+        }
+
         // Print results
         System.out.println("\n========== PREEMPTIVE PRIORITY SCHEDULING RESULTS ==========");
         System.out.println("PID\tArrival\tBurst\tPriority\tWaiting\tTurnaround");
         System.out.println("--------------------------------------------------------------");
         
-        double totalWaiting = 0;
-        double totalTurnaround = 0;
-        
-        for (PriorityProcess p : results) {
-            System.out.printf("%d\t%d\t%d\t%d\t\t%d\t%d\n", 
-                p.pid, p.arrivalTime, p.burstTime, p.priority, 
-                p.waitingTime, p.turnaroundTime);
-            totalWaiting += p.waitingTime;
-            totalTurnaround += p.turnaroundTime;
+        double totalWaiting = 0, totalTurnaround = 0;
+        for (int i = 0; i < n; i++) {
+            int tat = completion[i] - arrival[i];
+            System.out.printf("%d\t%d\t%d\t%d\t\t%d\t%d\n", (i + 1), arrival[i], burst[i], priority[i], waiting[i], tat);
+            totalWaiting += waiting[i];
+            totalTurnaround += tat;
         }
         
         System.out.println("--------------------------------------------------------------");
-        System.out.printf("Average Waiting Time: %.2f\n", totalWaiting / results.size());
-        System.out.printf("Average Turnaround Time: %.2f\n", totalTurnaround / results.size());
-        
-        sc.close();
-    }
-    
-    public static List<PriorityProcess> preemptivePriority(List<PriorityProcess> processes) {
-        // Create a copy
-        List<PriorityProcess> processList = new ArrayList<>();
-        for (PriorityProcess p : processes) {
-            PriorityProcess copy = new PriorityProcess(p.pid, p.arrivalTime, p.burstTime, p.priority);
-            copy.ioOperations = p.ioOperations;
-            copy.remainingTime = p.ioOperations.get(0)[0];
-            copy.originalBurst = p.originalBurst;
-            copy.currentIoPair = 0;
-            copy.inIo = false;
-            processList.add(copy);
-        }
-        
-        int time = 0;
-        int completed = 0;
-        int n = processList.size();
-        PriorityProcess currentProcess = null;
-        boolean ioBusy = false;
-        Queue<PriorityProcess> ioWaitingQueue = new LinkedList<>();
-        int currentIoFinishTime = 0;
-        
-        while (completed < n) {
-            // Get all processes that have arrived and not in I/O
-            List<PriorityProcess> availableProcesses = new ArrayList<>();
-            for (PriorityProcess p : processList) {
-                if (p.arrivalTime <= time && p.remainingTime > 0 && !p.inIo) {
-                    availableProcesses.add(p);
-                }
-            }
-            
-            // Check if I/O finished
-            if (ioBusy && time >= currentIoFinishTime) {
-                ioBusy = false;
-                if (currentProcess != null && currentProcess.inIo) {
-                    currentProcess.inIo = false;
-                    currentProcess.currentIoPair++;
-                    if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
-                        currentProcess.remainingTime = currentProcess.ioOperations.get(currentProcess.currentIoPair)[0];
-                    } else {
-                        currentProcess.completionTime = time;
-                        currentProcess.turnaroundTime = currentProcess.completionTime - currentProcess.arrivalTime;
-                        currentProcess.waitingTime = currentProcess.turnaroundTime - currentProcess.burstTime;
-                        completed++;
-                        currentProcess = null;
-                    }
-                }
-                if (!ioWaitingQueue.isEmpty()) {
-                    PriorityProcess nextIo = ioWaitingQueue.poll();
-                    nextIo.inIo = true;
-                    currentIoFinishTime = time + nextIo.ioOperations.get(nextIo.currentIoPair)[1];
-                    ioBusy = true;
-                }
-            }
-            
-            if (!availableProcesses.isEmpty()) {
-                // Sort by priority (lower = higher)
-                availableProcesses.sort(Comparator.comparingInt((PriorityProcess p) -> p.priority)
-                                                  .thenComparingInt(p -> p.arrivalTime));
-                
-                PriorityProcess nextProcess = availableProcesses.get(0);
-                
-                // Preemption
-                if (currentProcess != null && currentProcess != nextProcess && !currentProcess.inIo) {
-                    processList.add(currentProcess);
-                    currentProcess = null;
-                }
-                
-                if (currentProcess == null) {
-                    currentProcess = nextProcess;
-                    processList.remove(currentProcess);
-                }
-                
-                // Execute
-                if (!currentProcess.inIo) {
-                    currentProcess.remainingTime--;
-                    time++;
-                    
-                    int[] currentSegment = currentProcess.ioOperations.get(currentProcess.currentIoPair);
-                    int executedSoFar = currentProcess.originalBurst - currentProcess.remainingTime;
-                    
-                    if (currentSegment[1] > 0 && executedSoFar >= currentSegment[0]) {
-                        currentProcess.inIo = true;
-                        if (!ioBusy) {
-                            ioBusy = true;
-                            currentIoFinishTime = time + currentSegment[1];
-                        } else {
-                            ioWaitingQueue.add(currentProcess);
-                        }
-                        currentProcess = null;
-                    }
-                    else if (currentProcess.remainingTime == 0) {
-                        currentProcess.currentIoPair++;
-                        if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
-                            currentProcess.remainingTime = currentProcess.ioOperations.get(currentProcess.currentIoPair)[0];
-                        } else {
-                            currentProcess.completionTime = time;
-                            currentProcess.turnaroundTime = currentProcess.completionTime - currentProcess.arrivalTime;
-                            currentProcess.waitingTime = currentProcess.turnaroundTime - currentProcess.burstTime;
-                            completed++;
-                            currentProcess = null;
-                        }
-                    }
-                } else {
-                    time++;
-                }
-            } 
-            // No available processes - jump to next arrival
-            else {
-                int nextArrival = Integer.MAX_VALUE;
-                for (PriorityProcess p : processList) {
-                    if (p.remainingTime > 0 && p.arrivalTime > time && !p.inIo) {
-                        nextArrival = Math.min(nextArrival, p.arrivalTime);
-                    }
-                }
-                if (nextArrival != Integer.MAX_VALUE) {
-                    time = nextArrival;
-                } else {
-                    time++;
-                }
-            }
-        }
-        
-        return processList;
+        System.out.printf("Average Waiting Time: %.2f\n", totalWaiting / n);
+        System.out.printf("Average Turnaround Time: %.2f\n", totalTurnaround / n);
     }
 }
