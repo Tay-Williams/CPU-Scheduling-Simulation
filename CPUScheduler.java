@@ -37,7 +37,7 @@ public class CPUScheduler {
     }
 }
 
-// ==================== FCFS CODE (YOUR EXACT CODE) ====================
+// ==================== FCFS CODE ====================
 
 class FCFSProcess {
     int id;
@@ -119,6 +119,8 @@ class FCFS {
         // Track remaining CPU time for each process
         for (FCFSProcess p : processes) {
             p.remainingTime = p.ioOperations.get(0)[0];
+            p.currentIoPair = 0;
+            p.inIo = false;
         }
         
         Queue<FCFSProcess> readyQueue = new LinkedList<>();
@@ -127,17 +129,10 @@ class FCFS {
         FCFSProcess currentProcess = null;
         int currentIoFinishTime = 0;
         
-        // Add first process that arrives at time 0
-        for (FCFSProcess p : processes) {
-            if (p.arrival == 0) {
-                readyQueue.add(p);
-            }
-        }
-        
         while (completed < n) {
-            // Add newly arrived processes
+            // Add all processes that have arrived and are not already in queue/in I/O
             for (FCFSProcess p : processes) {
-                if (p.arrival == currentTime && !readyQueue.contains(p) && p != currentProcess && p.remainingTime > 0) {
+                if (p.arrival <= currentTime && p.remainingTime > 0 && !readyQueue.contains(p) && p != currentProcess && !p.inIo) {
                     readyQueue.add(p);
                 }
             }
@@ -150,29 +145,29 @@ class FCFS {
             // Check if I/O finished
             if (ioBusy && currentTime >= currentIoFinishTime) {
                 ioBusy = false;
-                FCFSProcess ioProcess = ioWaitingQueue.poll();
-                if (ioProcess != null) {
-                    // Start next I/O
-                    int[] nextSegment = ioProcess.ioOperations.get(ioProcess.currentIoPair);
+                // Return the process that finished I/O to ready queue
+                if (currentProcess != null && currentProcess.inIo) {
+                    currentProcess.inIo = false;
+                    currentProcess.currentIoPair++;
+                    if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
+                        currentProcess.remainingTime = currentProcess.ioOperations.get(currentProcess.currentIoPair)[0];
+                        readyQueue.add(currentProcess);
+                    } else {
+                        // Process completed after I/O
+                        currentProcess.completion = currentTime;
+                        currentProcess.turnaround = currentProcess.completion - currentProcess.arrival;
+                        currentProcess.waiting = currentProcess.turnaround - currentProcess.burst;
+                        completed++;
+                        currentProcess = null;
+                    }
+                }
+                // Start next I/O if waiting
+                if (!ioWaitingQueue.isEmpty()) {
+                    FCFSProcess nextIo = ioWaitingQueue.poll();
+                    nextIo.inIo = true;
+                    int[] nextSegment = nextIo.ioOperations.get(nextIo.currentIoPair);
                     currentIoFinishTime = currentTime + nextSegment[1];
                     ioBusy = true;
-                } else {
-                    // Return process to ready queue after I/O
-                    if (currentProcess != null && currentProcess.inIo) {
-                        currentProcess.inIo = false;
-                        currentProcess.currentIoPair++;
-                        if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
-                            currentProcess.remainingTime = currentProcess.ioOperations.get(currentProcess.currentIoPair)[0];
-                            readyQueue.add(currentProcess);
-                        } else {
-                            // Process completed
-                            currentProcess.completion = currentTime;
-                            currentProcess.turnaround = currentProcess.completion - currentProcess.arrival;
-                            currentProcess.waiting = currentProcess.turnaround - currentProcess.burst;
-                            completed++;
-                            currentProcess = null;
-                        }
-                    }
                 }
             }
             
@@ -210,7 +205,23 @@ class FCFS {
                     }
                     currentProcess = null;
                 }
-            } else {
+            } 
+            // No process running and nothing in ready queue or I/O
+            else if (currentProcess == null && readyQueue.isEmpty()) {
+                // Jump to next arrival time to avoid infinite loop
+                int nextArrival = Integer.MAX_VALUE;
+                for (FCFSProcess p : processes) {
+                    if (p.remainingTime > 0 && p.arrival > currentTime) {
+                        nextArrival = Math.min(nextArrival, p.arrival);
+                    }
+                }
+                if (nextArrival != Integer.MAX_VALUE) {
+                    currentTime = nextArrival;
+                } else {
+                    currentTime++;
+                }
+            }
+            else {
                 currentTime++;
             }
         }
@@ -523,7 +534,7 @@ class Round_Robin_Scheduling {
 
 }//end class
 
-// ==================== PRIORITY CODE (YOUR EXACT CODE) ====================
+// ==================== PRIORITY CODE ====================
 
 class PriorityProcess {
     int pid;
@@ -631,13 +642,15 @@ class PriorityScheduler {
     }
     
     public static List<PriorityProcess> preemptivePriority(List<PriorityProcess> processes) {
-        // Create a copy to avoid modifying original
+        // Create a copy
         List<PriorityProcess> processList = new ArrayList<>();
         for (PriorityProcess p : processes) {
             PriorityProcess copy = new PriorityProcess(p.pid, p.arrivalTime, p.burstTime, p.priority);
             copy.ioOperations = p.ioOperations;
             copy.remainingTime = p.ioOperations.get(0)[0];
             copy.originalBurst = p.originalBurst;
+            copy.currentIoPair = 0;
+            copy.inIo = false;
             processList.add(copy);
         }
         
@@ -661,30 +674,36 @@ class PriorityScheduler {
             // Check if I/O finished
             if (ioBusy && time >= currentIoFinishTime) {
                 ioBusy = false;
+                if (currentProcess != null && currentProcess.inIo) {
+                    currentProcess.inIo = false;
+                    currentProcess.currentIoPair++;
+                    if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
+                        currentProcess.remainingTime = currentProcess.ioOperations.get(currentProcess.currentIoPair)[0];
+                    } else {
+                        currentProcess.completionTime = time;
+                        currentProcess.turnaroundTime = currentProcess.completionTime - currentProcess.arrivalTime;
+                        currentProcess.waitingTime = currentProcess.turnaroundTime - currentProcess.burstTime;
+                        completed++;
+                        currentProcess = null;
+                    }
+                }
                 if (!ioWaitingQueue.isEmpty()) {
                     PriorityProcess nextIo = ioWaitingQueue.poll();
                     nextIo.inIo = true;
                     currentIoFinishTime = time + nextIo.ioOperations.get(nextIo.currentIoPair)[1];
                     ioBusy = true;
-                } else if (currentProcess != null && currentProcess.inIo) {
-                    currentProcess.inIo = false;
-                    currentProcess.currentIoPair++;
-                    if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
-                        currentProcess.remainingTime = currentProcess.ioOperations.get(currentProcess.currentIoPair)[0];
-                    }
                 }
             }
             
             if (!availableProcesses.isEmpty()) {
-                // Sort by priority (lower number = higher priority)
+                // Sort by priority (lower = higher)
                 availableProcesses.sort(Comparator.comparingInt((PriorityProcess p) -> p.priority)
                                                   .thenComparingInt(p -> p.arrivalTime));
                 
                 PriorityProcess nextProcess = availableProcesses.get(0);
                 
-                // Preemption: if higher priority process arrives
+                // Preemption
                 if (currentProcess != null && currentProcess != nextProcess && !currentProcess.inIo) {
-                    // Current process gets preempted, add back to ready queue
                     processList.add(currentProcess);
                     currentProcess = null;
                 }
@@ -694,12 +713,11 @@ class PriorityScheduler {
                     processList.remove(currentProcess);
                 }
                 
-                // Execute for 1 time unit
+                // Execute
                 if (!currentProcess.inIo) {
                     currentProcess.remainingTime--;
                     time++;
                     
-                    // Check if need to do I/O
                     int[] currentSegment = currentProcess.ioOperations.get(currentProcess.currentIoPair);
                     int executedSoFar = currentProcess.originalBurst - currentProcess.remainingTime;
                     
@@ -713,7 +731,6 @@ class PriorityScheduler {
                         }
                         currentProcess = null;
                     }
-                    // Check if CPU burst finished
                     else if (currentProcess.remainingTime == 0) {
                         currentProcess.currentIoPair++;
                         if (currentProcess.currentIoPair < currentProcess.ioOperations.size()) {
@@ -729,8 +746,20 @@ class PriorityScheduler {
                 } else {
                     time++;
                 }
-            } else {
-                time++;
+            } 
+            // No available processes - jump to next arrival
+            else {
+                int nextArrival = Integer.MAX_VALUE;
+                for (PriorityProcess p : processList) {
+                    if (p.remainingTime > 0 && p.arrivalTime > time && !p.inIo) {
+                        nextArrival = Math.min(nextArrival, p.arrivalTime);
+                    }
+                }
+                if (nextArrival != Integer.MAX_VALUE) {
+                    time = nextArrival;
+                } else {
+                    time++;
+                }
             }
         }
         
