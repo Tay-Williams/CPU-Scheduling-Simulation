@@ -693,18 +693,20 @@ class PriorityScheduler {
 
         // Print results
         System.out.println("\n========== PREEMPTIVE PRIORITY SCHEDULING RESULTS ==========");
-        System.out.println("PID\tArrival\tBurst\tPriority\tCompletion\tWaiting\tTurnaround");
-        System.out.println("--------------------------------------------------------------------------");
+        System.out.println("PID   Arrival Burst  Priority  Completion  Waiting  Turnaround");
+        System.out.println("----------------------------------------------------------------");
         
         double totalWaiting = 0, totalTurnaround = 0;
         for (int i = 0; i < n; i++) {
             int tat = completion[i] - arrival[i];
-            System.out.printf("%d\t%d\t%d\t%d\t\t%d\t\t%d\t%d\n", (i + 1), arrival[i], burst[i], priority[i], completion[i], waiting[i], tat);
+            // Fixed spacing with column widths for proper alignment
+            System.out.printf("%-5d %-7d %-6d %-9d %-11d %-8d %d\n", 
+                (i + 1), arrival[i], burst[i], priority[i], completion[i], waiting[i], tat);
             totalWaiting += waiting[i];
             totalTurnaround += tat;
         }
         
-        System.out.println("--------------------------------------------------------------------------");
+        System.out.println("----------------------------------------------------------------");
         System.out.printf("Average Waiting Time: %.2f\n", totalWaiting / n);
         System.out.printf("Average Turnaround Time: %.2f\n", totalTurnaround / n);
     }
