@@ -572,15 +572,14 @@ class PriorityScheduler {
 
             // Check if current process should be preempted by higher priority
             if (cpu != -1 && !ready.isEmpty()) {
-                int highestPid = ready.peek();
-                if (priority[highestPid] < priority[cpu]) {
-                    // Preempt current process
-                    int executed = time - cpuStartTime;
-                    remaining[cpu] -= executed;
-                    if (remaining[cpu] > 0) {
-                        lastReady[cpu] = time;
-                        ready.add(cpu);
-                    }
+            int highestPid = ready.peek();
+            if (priority[highestPid] < priority[cpu]) {
+            // Preempt current process
+            // execution already accounted for — DO NOT subtract again
+            if (remaining[cpu] > 0) {
+                lastReady[cpu] = time;
+                ready.add(cpu);
+                }
                     cpu = -1;
                 }
             }
