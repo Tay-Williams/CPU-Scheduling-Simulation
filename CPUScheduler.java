@@ -180,18 +180,18 @@ class FCFS {
         }
 
         System.out.println("\n========== FCFS SCHEDULING RESULTS ==========");
-        System.out.println("PID\tArrival\tBurst\tWaiting\tTurnaround");
-        System.out.println("------------------------------------------------");
+        System.out.println("PID\tArrival\tBurst\tCompletion\tWaiting\tTurnaround");
+        System.out.println("----------------------------------------------------------");
         
         double totalWaiting = 0, totalTurnaround = 0;
         for (int i = 0; i < n; i++) {
             int tat = completion[i] - arrival[i];
-            System.out.printf("%d\t%d\t%d\t%d\t%d\n", (i + 1), arrival[i], burst[i], waiting[i], tat);
+            System.out.printf("%d\t%d\t%d\t%d\t\t%d\t%d\n", (i + 1), arrival[i], burst[i], completion[i], waiting[i], tat);
             totalWaiting += waiting[i];
             totalTurnaround += tat;
         }
         
-        System.out.println("------------------------------------------------");
+        System.out.println("----------------------------------------------------------");
         System.out.printf("Average Waiting Time: %.2f\n", totalWaiting / n);
         System.out.printf("Average Turnaround Time: %.2f\n", totalTurnaround / n);
     }
@@ -654,18 +654,18 @@ class PriorityScheduler {
 
         // Print results
         System.out.println("\n========== PREEMPTIVE PRIORITY SCHEDULING RESULTS ==========");
-        System.out.println("PID\tArrival\tBurst\tPriority\tWaiting\tTurnaround");
-        System.out.println("--------------------------------------------------------------");
+        System.out.println("PID\tArrival\tBurst\tPriority\tCompletion\tWaiting\tTurnaround");
+        System.out.println("--------------------------------------------------------------------------");
         
         double totalWaiting = 0, totalTurnaround = 0;
         for (int i = 0; i < n; i++) {
             int tat = completion[i] - arrival[i];
-            System.out.printf("%d\t%d\t%d\t%d\t\t%d\t%d\n", (i + 1), arrival[i], burst[i], priority[i], waiting[i], tat);
+            System.out.printf("%d\t%d\t%d\t%d\t\t%d\t\t%d\t%d\n", (i + 1), arrival[i], burst[i], priority[i], completion[i], waiting[i], tat);
             totalWaiting += waiting[i];
             totalTurnaround += tat;
         }
         
-        System.out.println("--------------------------------------------------------------");
+        System.out.println("--------------------------------------------------------------------------");
         System.out.printf("Average Waiting Time: %.2f\n", totalWaiting / n);
         System.out.printf("Average Turnaround Time: %.2f\n", totalTurnaround / n);
     }
