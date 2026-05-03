@@ -525,6 +525,7 @@ class PriorityScheduler {
 
     static void simulatePriority(int n, int[] arrival, int[] burst, int[] priority, List<int[]>[] ioOps) {
         int[] remaining = new int[n];
+        int[] remainingOriginal = new int[n];
         int[] segment = new int[n];
         int[] completion = new int[n];
         int[] waiting = new int[n];
@@ -532,6 +533,7 @@ class PriorityScheduler {
 
         for (int i = 0; i < n; i++) {
             remaining[i] = ioOps[i].get(0)[0];
+            remainingOriginal[i] = ioOps[i].get(0)[0];
             segment[i] = 0;
             lastReady[i] = arrival[i];
         }
@@ -541,102 +543,139 @@ class PriorityScheduler {
             events.add(new int[]{arrival[i], 0, i});
         }
 
-        List<Integer> ready = new ArrayList<>();
+        PriorityQueue<Integer> ready = new PriorityQueue<>((a, b) -> {
+            if (priority[a] != priority[b]) return Integer.compare(priority[a], priority[b]);
+            return Integer.compare(arrival[a], arrival[b]);
+        });
+        
         Queue<Integer> ioWait = new LinkedList<>();
         boolean ioBusy = false;
         int cpu = -1;
+        int cpuStartTime = 0;
         int time = 0;
         int completed = 0;
 
         while (completed < n) {
-            // Pick highest priority process from ready queue
-            if (cpu == -1 && !ready.isEmpty()) {
-                int best = 0;
-                for (int i = 1; i < ready.size(); i++) {
-                    if (priority[ready.get(i)] < priority[ready.get(best)]) {
-                        best = i;
-                    }
+            // Add all processes that have arrived by current time
+            boolean added;
+            do {
+                added = false;
+                int[] nextEvent = events.peek();
+                if (nextEvent != null && nextEvent[0] <= time && nextEvent[1] == 0) {
+                    events.poll();
+                    int pid = nextEvent[2];
+                    lastReady[pid] = time;
+                    ready.add(pid);
+                    added = true;
                 }
-                cpu = ready.remove(best);
-                waiting[cpu] += time - lastReady[cpu];
-                events.add(new int[]{time + 1, 1, cpu});
+            } while (added);
+
+            // Check if current process should be preempted by higher priority
+            if (cpu != -1 && !ready.isEmpty()) {
+                int highestPid = ready.peek();
+                if (priority[highestPid] < priority[cpu]) {
+                    // Preempt current process
+                    int executed = time - cpuStartTime;
+                    remaining[cpu] -= executed;
+                    if (remaining[cpu] > 0) {
+                        lastReady[cpu] = time;
+                        ready.add(cpu);
+                    }
+                    cpu = -1;
+                }
             }
 
-            int[] e = events.poll();
-            if (e == null) {
-                if (cpu == -1 && ready.isEmpty() && !ioBusy && ioWait.isEmpty()) {
-                    int next = Integer.MAX_VALUE;
-                    for (int i = 0; i < n; i++) {
-                        if (remaining[i] > 0 && arrival[i] > time) {
-                            next = Math.min(next, arrival[i]);
-                        }
-                    }
-                    if (next != Integer.MAX_VALUE) time = next;
-                    else time++;
+            // Start new process if CPU is free
+            if (cpu == -1 && !ready.isEmpty()) {
+                cpu = ready.poll();
+                cpuStartTime = time;
+                waiting[cpu] += time - lastReady[cpu];
+            }
+
+            // Find next event time
+            int nextTime = Integer.MAX_VALUE;
+            
+            if (cpu != -1) {
+                nextTime = time + remaining[cpu];
+            }
+            
+            if (!events.isEmpty()) {
+                int nextArrival = events.peek()[0];
+                if (nextArrival < nextTime) {
+                    nextTime = nextArrival;
                 }
+            }
+            
+            if (nextTime == Integer.MAX_VALUE) {
+                if (cpu == -1 && ready.isEmpty() && !ioBusy && ioWait.isEmpty()) {
+                    // Jump to next arrival
+                    if (!events.isEmpty()) {
+                        time = events.peek()[0];
+                        continue;
+                    }
+                }
+                time++;
                 continue;
             }
-
-            time = e[0];
-            int type = e[1];
-            int pid = e[2];
-
-            if (type == 0) {
-                lastReady[pid] = time;
-                ready.add(pid);
-                // Preempt if higher priority
-                if (cpu != -1 && priority[pid] < priority[cpu]) {
-                    events.add(new int[]{time, 1, cpu});
-                    cpu = -1;
+            
+            int elapsed = nextTime - time;
+            
+            // Execute CPU if a process is running
+            if (cpu != -1) {
+                remaining[cpu] -= elapsed;
+            }
+            
+            time = nextTime;
+            
+            // Process all arrivals at this time
+            boolean arrivalProcessed;
+            do {
+                arrivalProcessed = false;
+                int[] nextEvent = events.peek();
+                if (nextEvent != null && nextEvent[0] == time && nextEvent[1] == 0) {
+                    events.poll();
+                    int pid = nextEvent[2];
+                    lastReady[pid] = time;
+                    ready.add(pid);
+                    arrivalProcessed = true;
                 }
-            } 
-            else if (type == 1) {
-                remaining[pid]--;
-                
-                if (remaining[pid] == 0) {
-                    int ioDur = ioOps[pid].get(segment[pid])[1];
-                    if (ioDur > 0) {
-                        if (!ioBusy) {
-                            ioBusy = true;
-                            events.add(new int[]{time + ioDur, 2, pid});
-                        } else {
-                            ioWait.add(pid);
-                        }
+            } while (arrivalProcessed);
+            
+            // Check if current CPU burst completed
+            if (cpu != -1 && remaining[cpu] == 0) {
+                int ioDur = ioOps[cpu].get(segment[cpu])[1];
+                if (ioDur > 0) {
+                    if (!ioBusy) {
+                        ioBusy = true;
+                        events.add(new int[]{time + ioDur, 2, cpu});
                     } else {
-                        segment[pid]++;
-                        if (segment[pid] < ioOps[pid].size()) {
-                            remaining[pid] = ioOps[pid].get(segment[pid])[0];
-                            lastReady[pid] = time;
-                            ready.add(pid);
-                        } else {
-                            completion[pid] = time;
-                            completed++;
-                        }
+                        ioWait.add(cpu);
                     }
-                    cpu = -1;
                 } else {
-                    // Check if higher priority process is waiting
-                    boolean higherExists = false;
-                    for (int p : ready) {
-                        if (priority[p] < priority[pid]) {
-                            higherExists = true;
-                            break;
-                        }
-                    }
-                    if (higherExists) {
-                        lastReady[pid] = time;
-                        ready.add(pid);
-                        cpu = -1;
+                    segment[cpu]++;
+                    if (segment[cpu] < ioOps[cpu].size()) {
+                        remaining[cpu] = ioOps[cpu].get(segment[cpu])[0];
+                        remainingOriginal[cpu] = remaining[cpu];
+                        lastReady[cpu] = time;
+                        ready.add(cpu);
                     } else {
-                        events.add(new int[]{time + 1, 1, pid});
+                        completion[cpu] = time;
+                        completed++;
                     }
                 }
-            } 
-            else if (type == 2) {
+                cpu = -1;
+            }
+            
+            // Process I/O completions
+            int[] ioEvent = events.peek();
+            if (ioEvent != null && ioEvent[0] == time && ioEvent[1] == 2) {
+                events.poll();
+                int pid = ioEvent[2];
                 ioBusy = false;
                 segment[pid]++;
                 if (segment[pid] < ioOps[pid].size()) {
                     remaining[pid] = ioOps[pid].get(segment[pid])[0];
+                    remainingOriginal[pid] = remaining[pid];
                     lastReady[pid] = time;
                     ready.add(pid);
                 } else {
