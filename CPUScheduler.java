@@ -213,10 +213,8 @@ class FCFS {
 
             //if the CPU is free and there is a process in the ready queue, then get the next process in the ready queue
             if (cpu == -1 && !ready.isEmpty()) {
-                cpu = ready.poll();
 
-                //waiting time in the ready queue [process] = (the current time, which is the time it leaves the ready queue) - (the time it last entered the ready queue)
-                waiting[cpu] = waiting[cpu] + (time - lastReady[cpu] );
+                cpu = ready.poll();
             }
 
             int nextTime = Integer.MAX_VALUE;
@@ -302,8 +300,9 @@ class FCFS {
         for (int i = 0; i < n; i++) {
 
             int tat = completion[i] - arrival[i];
-            totalWaiting = totalWaiting + waiting[i];
             totalTurnaround = totalTurnaround + tat;
+            waiting[i] = tat - burst[i];
+            totalWaiting = totalWaiting + waiting[i];
 
             System.out.printf("%d\t%d\t%d\t%d\t\t%d\t%d\n", (i + 1), arrival[i], burst[i], completion[i], waiting[i], tat);
         }
@@ -459,7 +458,6 @@ class Round_Robin_Scheduling {
             if (Current_CPU_Pid == -1 && !readyQueue.isEmpty()) {
 
                 Current_CPU_Pid = readyQueue.poll();
-                waitingTime[Current_CPU_Pid] += currentTime - Last_Ready_Time[Current_CPU_Pid];
                 
                 //stores the amount of time the process executed for (either because it got preempted because it reached the time quantum or because it finished its burst time)
                 int Current_CPU_Time_Slice = Math.min(timeQuantum, remaining_CPU_Time[Current_CPU_Pid]);
@@ -623,7 +621,7 @@ class Round_Robin_Scheduling {
         //printing CPU metrics
         System.out.println("\n***Round Robin Scheduling***");
         System.out.println("------------------------------------------------------------------------------");
-        System.out.printf("%-8s %-15s %-18s %-15s %s\n", "PID", "Arrival Time", "Completion Time", "Waiting Time", "Turnaround Time");
+        System.out.printf("%-8s %-15s %-12s %-18s %-15s %-15s%n", "PID", "Arrival Time", "Burst Time", "Completion Time", "Waiting Time", "Turnaround Time");
 
         int totalWaitingTime = 0;
         int totalTurnaroundTime = 0;
@@ -632,11 +630,11 @@ class Round_Robin_Scheduling {
         for (int i = 0; i < n; i++) {
 
             int turnaround = completionTime[i] - arrivalTimes[i];
-            
+            waitingTime[i] = turnaround - burstTimes[i];
             totalWaitingTime = totalWaitingTime + waitingTime[i];
             totalTurnaroundTime = totalTurnaroundTime + turnaround;
 
-            System.out.printf("%-8d %-15d %-18d %-15d %d\n", i + 1, arrivalTimes[i], completionTime[i], waitingTime[i], turnaround);
+            System.out.printf("%-8d %-15d %-12d %-18d %-15d %-15d%n", i + 1, arrivalTimes[i], burstTimes[i], completionTime[i], waitingTime[i], turnaround);
         }
 
         System.out.println("------------------------------------------------------------------------------");
@@ -781,7 +779,6 @@ class PriorityScheduler {
             if (cpu == -1 && !ready.isEmpty()) {
 
                 cpu = ready.poll();
-                waiting[cpu] = waiting[cpu] + (time - lastReady[cpu] );
             }
 
             int nextTime = Integer.MAX_VALUE;
@@ -910,6 +907,7 @@ class PriorityScheduler {
         double totalWaiting = 0, totalTurnaround = 0;
         for (int i = 0; i < n; i++) {
             int tat = completion[i] - arrival[i];
+            waiting[i] = tat - burst[i];
             System.out.printf("%-5d %-7d %-6d %-9d %-11d %-8d %d\n", (i + 1), arrival[i], burst[i], priority[i], completion[i], waiting[i], tat);
             totalWaiting += waiting[i];
             totalTurnaround += tat;
